@@ -48,7 +48,11 @@ End-to-end pipeline patterns that compose ADE operations into production workflo
 ### For Claude Code agents
 
 ```
-/plugin install ade-document-processing@landing-ai/ade-document-processing-skills
+# Step 1: Add the marketplace 
+/plugin marketplace add landing-ai/ade-document-processing-skills
+
+# Step 2: Install the plugin
+/plugin install ade-document-processing@ade-document-processing-skills
 ```
 
 ### Manual installation
