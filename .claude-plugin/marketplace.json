@@ -1,0 +1,11 @@
+{
+  "name": "ade-document-processing-skills",
+  "owner": { "name": "landing-ai" },
+  "plugins": [
+    {
+      "name": "ade-document-processing",
+      "source": "./plugins/ade-document-processing",
+      "description": "Agent skills for LandingAI's Agentic Document Extraction (ADE) — production-ready document AI with 99%+ accuracy. Convert complex, real-world documents into accurate, structured data with full traceability. Parse, extract, classify, and build end-to-end pipelines across 20+ file formats without templates or ML training."
+    }
+  ]
+}

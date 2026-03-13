@@ -1,0 +1,17 @@
+{
+  "name": "ade-document-processing",
+  "version": "1.0.0",
+  "description": "Agent skills for LandingAI's Agentic Document Extraction (ADE) — production-ready document AI with 99%+ accuracy. Vision-first models that parse, extract, and classify documents with full auditability and traceability.",
+  "skills": [
+    {
+      "name": "document-extraction",
+      "source": "./skills/document-extraction/SKILL.md",
+      "description": "Core ADE SDK operations for accurate, traceable document processing. Use when users need to parse documents (PDFs, images, spreadsheets, presentations) into structured Markdown with layout awareness, extract specific fields using JSON schemas or Pydantic models, classify and split multi-document batches by type, process large files asynchronously (up to 1 GB / 6,000 pages), or get visual grounding with precise bounding boxes and page coordinates for every extracted element."
+    },
+    {
+      "name": "document-workflows",
+      "source": "./skills/document-workflows/SKILL.md",
+      "description": "End-to-end pipeline patterns for production document processing. Use when users need to batch process documents in parallel, build classify-then-extract pipelines for mixed document types, prepare documents for RAG with semantic chunking and vector DB ingestion (ChromaDB, FAISS), export structured results to DataFrames, CSV, or Snowflake, visualize extractions with bounding box overlays and page annotations, or find and highlight specific terms using word-level grounding."
+    }
+  ]
+}
