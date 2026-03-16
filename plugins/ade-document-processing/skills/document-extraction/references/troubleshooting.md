@@ -7,13 +7,13 @@
 | **400** | Bad Request | `anyOf` sub-schema missing `type`/`anyOf` keyword; invalid parameter | Fix schema per error message |
 | **401** | Unauthorized | Missing or invalid `VISION_AGENT_API_KEY` | Check `.env` file and key validity |
 | **413** | Payload Too Large | File exceeds sync parse limit | Use Parse Jobs API for large files |
-| **422** | Unprocessable Entity | Invalid JSON schema; unsupported keywords; top-level type not `"object"` | Validate schema structure |
+| **422** | Unprocessable Entity | Invalid JSON schema; unsupported keywords; top-level type not `"object"`; password-protected file without ZDR or with wrong password | Validate schema structure; check password; enable ZDR |
 | **429** | Rate Limited | Too many concurrent requests | Add retry with exponential backoff |
 | **206** | Partial Content | Some pages failed (parse) or schema violation (extract) | Check `metadata.failed_pages` or `metadata.schema_violation_error` |
 
 ## Parse Failures
 
-- **Password-protected PDF**: Remove password protection before parsing
+- **Password-protected file**: Pass `password="..."` parameter (requires ZDR). Without ZDR, remove password protection before parsing
 - **Unsupported format**: Check [file formats reference](file-formats.md)
 - **File too large**: Use Parse Jobs API (`client.parse_jobs.create()`) for files > 50 pages or > 10 MB
 - **Poor OCR quality**: Use high-resolution scans (300+ DPI); consider `dpt-2-latest` over `dpt-2-mini` for scanned docs

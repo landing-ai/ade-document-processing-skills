@@ -227,7 +227,7 @@ Choose the right model for your documents:
 
 **Recommendation:** Use `dpt-2-latest` unless you have simple documents where cost/speed is critical.
 
-**Version Pinning:** For production, use dated versions (e.g., `dpt-2-20251103`) for reproducibility.
+**Version Pinning:** For production, use dated versions (e.g., `dpt-2-20260302`) for reproducibility.
 
 ### Parse Large Files (Async)
 
@@ -387,10 +387,34 @@ with open("document_parsed.md", "w", encoding="utf-8") as f:
 response = client.parse(
     document=Path("document.pdf"),
     model="dpt-2-latest",
-    split="page",  # Optional: organize chunks by page
-    save_to="output/",  # Optional: auto-save response JSON
+    split="page",       # Optional: organize chunks by page
+    password="secret",   # Optional: decrypt protected files (ZDR only)
+    save_to="output/",   # Optional: auto-save response JSON
 )
 ```
+
+### Parse Password-Protected Files
+
+Organizations with [Zero Data Retention (ZDR)](https://docs.landing.ai/ade/zdr) enabled can parse password-protected files by passing the `password` parameter. Supported formats: PDF, DOC, DOCX, ODT, PPT, PPTX, XLSX.
+
+```python
+# Sync parse
+response = client.parse(
+    document=Path("encrypted.pdf"),
+    password="document_password",
+    model="dpt-2-latest"
+)
+
+# Async parse jobs
+job = client.parse_jobs.create(
+    document=Path("encrypted.pdf"),
+    password="document_password",
+    model="dpt-2-latest"
+)
+```
+
+> **Note:** Without ZDR the API returns HTTP 422. If the password is wrong the API
+> returns HTTP 422 with a decryption error. The parameter is ignored for unencrypted documents.
 
 ## Structured Data Extraction
 
@@ -747,7 +771,7 @@ Parse returns structured JSON with five top-level fields:
     "duration_ms": 1500,
     "credit_usage": 2.0,
     "job_id": "abc-123",
-    "version": "dpt-2-20251103",
+    "version": "dpt-2-20260302",
     "failed_pages": []
   }
 }
@@ -872,7 +896,7 @@ for elem_id, info in response.grounding.items():
 
 - **Use dpt-2-latest** for most documents (complex layouts, logos, signatures)
 - **Use dpt-2-mini** for simple, digitally-native documents (faster, cheaper)
-- **Pin versions in production** for reproducibility (e.g., `dpt-2-20251103`)
+- **Pin versions in production** for reproducibility (e.g., `dpt-2-20260302`)
 - **Use extract-latest** for extraction (automatically uses newest model)
 - **Do NOT use dpt-1** — deprecated March 31, 2026; migrate to dpt-2
 
@@ -936,7 +960,7 @@ if err:
 
 - **Prefer PDF** for native documents (no conversion needed)
 - **Use high-resolution images** (300+ DPI) for better OCR
-- **Remove password protection** from PDFs before parsing
+- **Password-protected files**: Use the `password` parameter (requires ZDR). Without ZDR, remove password protection before parsing
 - **Test conversion** for DOCX/PPTX files (layout may change)
 
 For complete file format reference, see [references/file-formats.md](references/file-formats.md)
