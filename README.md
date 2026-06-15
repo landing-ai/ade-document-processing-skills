@@ -22,7 +22,9 @@ Core ADE SDK operations for parsing and extracting document content.
 
 - **Parse** documents into structured Markdown with layout awareness and hierarchical JSON
 - **Extract** specific fields using JSON schemas or Pydantic models (invoices, forms, tables)
-- **Split** and classify multi-document batches by type (invoices vs receipts, statements vs forms)
+- **Split** multi-document batches into separate documents by type (invoices vs receipts, statements vs forms)
+- **Classify** each page by type to route pages before parsing (Preview)
+- **Generate a table of contents** — hierarchical section structure from parsed documents (Preview)
 - **Process large files** asynchronously (up to 1 GB / 6,000 pages)
 - **Visual grounding** — precise bounding boxes, page numbers, and confidence scores for every element
 
@@ -99,7 +101,7 @@ The skills guide your agent to write Python scripts that process documents using
 >
 > "Write a Python script that reads all PDFs in a folder, extracts the abstract and introduction sections, and saves them as plain text files"
 
-The skills handle dependency installation, API client setup, and error handling automatically.
+The skills include guidance and patterns for dependency installation, API client setup, and error handling, so your agent handles these for you.
 
 ## Repository Structure
 
