@@ -1,7 +1,7 @@
 {
   "name": "ade-document-processing",
-  "version": "1.0.0",
-  "description": "Agent skills for LandingAI's Agentic Document Extraction (ADE) — production-ready document AI with 99%+ accuracy. Vision-first models that parse, extract, and classify documents with full auditability and traceability.",
+  "version": "1.2.0",
+  "description": "Agent skills for LandingAI's Agentic Document Extraction (ADE): production-ready document AI with 99%+ accuracy. Vision-first models that parse, extract, and classify documents with full auditability and traceability.",
   "author": {
     "name": "LandingAI",
     "url": "https://landing.ai"
