@@ -1,6 +1,6 @@
 {
   "name": "ade-document-processing",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Agent skill for LandingAI's Agentic Document Extraction (ADE): production-ready document AI with 99%+ accuracy. Parse, extract, and classify documents through the ADE REST APIs or the Python and TypeScript libraries, with full auditability and traceability.",
   "author": {
     "name": "LandingAI",
