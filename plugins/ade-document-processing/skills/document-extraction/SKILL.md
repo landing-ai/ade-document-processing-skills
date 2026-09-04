@@ -1,6 +1,6 @@
 ---
 name: document-extraction
-description: "Parses documents into structured Markdown, extracts fields with JSON schemas, classifies pages, and splits mixed document batches using LandingAI's Agentic Document Extraction (ADE) REST APIs, with official Python and TypeScript libraries. Builds document pipelines: batch and async processing for large files, classify-then-extract routing, RAG chunking and embeddings, multi-page table stitching, bounding box visualization, cropping, and word-level highlighting. Use when processing PDFs, images, scans, Office documents (Word, PowerPoint), invoices, forms, or bank statements, when migrating between ADE API versions, or when the user mentions ADE, parsing, extraction, classification, document splitting, table of contents generation, grounding, bounding boxes, blocks, chunks, ranges, or word confidence scores."
+description: "Parses documents into structured Markdown, extracts fields with JSON schemas, classifies pages, and splits mixed document batches using LandingAI's Agentic Document Extraction (ADE) REST APIs, with official Python and TypeScript libraries. Builds document pipelines: batch and async processing for large files, classify-then-extract routing, RAG chunking and embeddings, multi-page table stitching, bounding box visualization, cropping, word-level highlighting, and grounding extracted fields to their source citations. Use when processing PDFs, images, scans, Office documents (Word, PowerPoint), invoices, forms, or bank statements, when migrating between ADE API versions, or when the user mentions ADE, parsing, extraction, classification, document splitting, table of contents generation, grounding, bounding boxes, blocks, chunks, ranges, citations, or word confidence scores."
 ---
 
 # Document Extraction (ADE)
@@ -17,6 +17,7 @@ ADE has two API generations. The **v2 APIs** (powered by DPT-3) are the current 
 | Parse Jobs | v2 | `POST/GET https://api.ade.landing.ai/v2/parse/jobs` | https://docs.landing.ai/dpt3/parse-async |
 | Extract | v2 | `POST https://api.ade.landing.ai/v2/extract` | https://docs.landing.ai/dpt3/extract |
 | Extract Jobs | v2 | `POST/GET https://api.ade.landing.ai/v2/extract/jobs` | https://docs.landing.ai/dpt3/extract-async |
+| Ground | v2 | `POST https://api.ade.landing.ai/v2/ground` | https://docs.landing.ai/dpt3/ground |
 | Classify | v1 | `POST https://api.va.landing.ai/v1/ade/classify` | https://docs.landing.ai/ade/ade-classify |
 | Section | v1 | `POST https://api.va.landing.ai/v1/ade/section` | https://docs.landing.ai/ade/ade-section |
 | Build Extract Schema | v1 | `POST https://api.va.landing.ai/v1/ade/extract/build-schema` | https://docs.landing.ai/ade/ade-extract-schema-api |
@@ -74,7 +75,7 @@ All endpoints authenticate with the same header: `Authorization: Bearer YOUR_API
 
 When writing scripts, use the user's language and environment. Never install packages globally; use the project's virtualenv or package.json.
 
-## Core Flow: Parse, Then Extract (v2)
+## Core Flow: Parse, Extract, Then Ground (v2)
 
 Parse converts a document into Markdown plus structure. Extract pulls schema-defined fields from that Markdown. **Run both as jobs on the `standard` service tier**: create the job, then call `wait()` (or poll `GET .../jobs/{job_id}`) for the finished job. Standard jobs cost half the credits of `priority`; see Processing Modes below for when to leave this default. Keep the trailing `<!-- doc_id=... -->` comment when saving Markdown; v2 Extract reads it to link the extraction back to its parse job.
 
@@ -207,6 +208,59 @@ console.log(extracted.extraction);
 
 The libraries also accept a Pydantic class (Python) or Zod schema (TypeScript) directly on `schema`. Full contract: [Extract API reference](https://docs.landing.ai/api-reference/extract/ade-extract), https://docs.landing.ai/dpt3/extract-input.
 
+**Step 3: Ground (optional).** Ground maps each extracted field back to the parse blocks it was quoted from, returning page numbers and bounding boxes, so you don't have to join ranges by hand. Pass Step 1's `structure` and Step 2's `extraction_metadata`; it runs synchronously, needs no job, and is always free. Each multipart field carries one JSON-serialized object, so write the two out to their own files first: on a curl-saved job response both sit under `.result`, while the library examples above already wrote them unwrapped.
+
+```bash
+curl -X POST 'https://api.ade.landing.ai/v2/ground' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -F 'extraction_metadata=<output/extraction-metadata.json' \
+  -F 'structure=<output/structure.json' \
+  -o output/ground-response.json
+```
+
+```python
+import json
+from pathlib import Path
+from landingai_ade import LandingAIADE
+
+client = LandingAIADE()
+parse_result = json.loads(Path("output/parse-response.json").read_text())
+extract_result = json.loads(Path("output/extract-response.json").read_text())
+
+# A mismatched pair is not an error: Ground would return 200 with wrong boxes.
+assert extract_result["metadata"]["doc_id"] == parse_result["metadata"]["job_id"]
+
+ground_response = client.v2.ground(
+    extraction_metadata=extract_result["extraction_metadata"],
+    structure=parse_result["structure"],
+)
+print(ground_response.grounding)
+```
+
+```typescript
+import fs from "fs";
+import LandingAIADE from "landingai-ade";
+
+const client = new LandingAIADE();
+const parseResult = JSON.parse(fs.readFileSync("output/parse-response.json", "utf8"));
+const extractResult = JSON.parse(fs.readFileSync("output/extract-response.json", "utf8"));
+
+// A mismatched pair is not an error: Ground would return 200 with wrong boxes.
+if (extractResult.metadata.doc_id !== parseResult.metadata.job_id) {
+  throw new Error("The extraction and the structure came from different parses.");
+}
+
+const groundResponse = await client.v2.ground({
+  extraction_metadata: extractResult.extraction_metadata,
+  structure: parseResult.structure,
+});
+console.log(groundResponse.grounding);
+```
+
+**Pair each extraction with its own parse.** Ranges shift between parses, even of the same file, so an extraction grounds only against the `structure` it was extracted from. A mismatched pair is not an error: Ground returns HTTP 200 with plausible boxes that land on the wrong content, and nothing in the response marks it. Check the pairing in code before rendering anything, by comparing the Extract response's `metadata.doc_id` with the Parse response's `metadata.job_id`. Re-parsing a document means re-running its extraction too.
+
+Organizations with Zero Data Retention enabled get HTTP 501 from Ground instead of a result; see "Reading v2 Responses" below for the manual fallback. Full contract: [Ground API reference](https://docs.landing.ai/api-reference/ground/ade-ground), https://docs.landing.ai/dpt3/ground.
+
 ## Reading v2 Responses
 
 **Parse** returns three top-level fields (https://docs.landing.ai/dpt3/parse-response); on a finished job they sit under `result`:
@@ -222,14 +276,16 @@ Markdown format details (page breaks, `<figure>` elements, attestation labels, t
 **Extract** returns (https://docs.landing.ai/dpt3/extract-response):
 
 - `extraction`: values matching the schema. Fields the model cannot find come back as `null` (arrays as `[]`).
-- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges. To get a field's bounding box, find the parse block whose `grounding.range` contains the field's range, then use that block's `grounding.box`.
+- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges. For a field's bounding box, call Ground (Core Flow Step 3 above) with this `extraction_metadata` and the parse's `structure`; it does the range-to-block join server-side. Compute it by hand only as the documented fallback for Zero Data Retention organizations, where Ground returns HTTP 501: find the parse blocks whose `grounding.range` overlaps the field's range, then use those blocks' `grounding.box`.
 - `metadata.doc_id`: the originating parse job, when the input Markdown carried the `doc_id` comment.
+
+**Ground** returns `grounding`, a tree mirroring the `extraction_metadata` you sent: objects and arrays keep their shape, and each `{value, ranges}` leaf becomes the list of blocks its ranges overlap. Each entry carries `block_id`, `type`, `parent_id` (on nested blocks, naming the enclosing one), the block's own `{page, range, box}`, and the overlapping subset of its `atomic_grounding`. Two leaves carry no blocks, for different reasons: `null` means the field had no ranges, so nothing was quoted for it (the model synthesized the value or found none), while `[]` means valid ranges matched no block, which usually means the two inputs came from different parses. Handle them separately. A value inside a table matches both the `table` and its `table_cell`, so pick whichever your highlight needs (https://docs.landing.ai/dpt3/ground).
 
 **Partial results (HTTP 206):** Parse sets `metadata.failed_pages` and per-page `status`; Extract sets `schema_violation_error` and `warnings`. Data is still returned and credits are consumed. **Errors:** every v2 error body has a stable `code` and a human-readable `message`; branch on `code`, never on message text. Credits are consumed only on 200/206; error responses are free, and async jobs bill only when they complete. Per-endpoint error tables: [parse-troubleshoot](https://docs.landing.ai/dpt3/parse-troubleshoot), [extract-troubleshoot](https://docs.landing.ai/dpt3/extract-troubleshoot).
 
 ## Processing Modes and Service Tiers (v2)
 
-Every v2 request runs on a service tier, `standard` or `priority`. Jobs default to `standard` and accept `service_tier` to switch. The sync endpoints (`POST /v2/parse`, `POST /v2/extract`; `client.v2.parse` / `client.v2.extract` in the libraries) always run at `priority`, return the result inline, accept `save_to` / `saveTo`, and reject `service_tier` and `output_save_url`.
+Every v2 request runs on a service tier, `standard` or `priority`. Jobs default to `standard` and accept `service_tier` to switch. The sync endpoints (`POST /v2/parse`, `POST /v2/extract`; `client.v2.parse` / `client.v2.extract` in the libraries) always run at `priority`, return the result inline, accept `save_to` / `saveTo`, and reject `service_tier` and `output_save_url`. Ground (`POST /v2/ground`) is synchronous only, with no Jobs variant or `service_tier` choice; its response always reports `billing.service_tier: "priority"`, but the call itself is always free.
 
 | Mode | Best for | Result | Turnaround | Credits |
 |------|----------|--------|-----------|---------|
@@ -375,6 +431,7 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - v2 overview: https://docs.landing.ai/dpt3/overview
 - v2 quickstart: https://docs.landing.ai/dpt3/quickstart
 - Parsing models (DPT-3 Pro vs. DPT-3 Verity): https://docs.landing.ai/dpt3/parse-models
+- Ground extracted fields: https://docs.landing.ai/dpt3/ground
 - Zero Data Retention: https://docs.landing.ai/ade/zdr
 - Webhooks (job completion events): https://docs.landing.ai/dpt3/webhooks
 - Migration guide (v1 to v2): https://docs.landing.ai/dpt3/migration-guide
@@ -386,6 +443,7 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - Parse Jobs v2: https://docs.landing.ai/api-reference/parse/ade-parse-jobs
 - Extract v2: https://docs.landing.ai/api-reference/extract/ade-extract
 - Extract Jobs v2: https://docs.landing.ai/api-reference/extract/ade-extract-jobs
+- Ground v2: https://docs.landing.ai/api-reference/ground/ade-ground
 - Classify: https://docs.landing.ai/api-reference/tools/ade-classify
 - Section: https://docs.landing.ai/api-reference/tools/ade-section
 - Build Extract Schema: https://docs.landing.ai/api-reference/tools/ade-build-extract-schema
@@ -396,6 +454,7 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 **Troubleshooting (per endpoint):**
 - Parse v2: https://docs.landing.ai/dpt3/parse-troubleshoot
 - Extract v2: https://docs.landing.ai/dpt3/extract-troubleshoot
+- Ground v2: https://docs.landing.ai/dpt3/ground-troubleshoot
 - Classify: https://docs.landing.ai/ade/ade-classify-troubleshoot
 - Section: https://docs.landing.ai/ade/ade-section-troubleshoot
 - Split: https://docs.landing.ai/ade/ade-split-troubleshoot
