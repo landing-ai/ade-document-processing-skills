@@ -290,12 +290,12 @@ Every v2 request runs on a service tier, `standard` or `priority`. Jobs default 
 | Mode | Best for | Result | Turnaround | Credits |
 |------|----------|--------|-----------|---------|
 | Jobs, `service_tier=standard` (default) | Work with no one waiting: automated pipelines, background agent steps, scheduled ingestion, the largest documents | Poll, or `output_save_url` | Minutes to hours | Half the `priority` rate |
-| Jobs, `service_tier=priority` | Time-sensitive work sync can't handle: larger documents, or not holding a connection open | Poll, or `output_save_url` | Seconds to minutes | Full rate |
+| Jobs, `service_tier=priority` | Time-sensitive work sync can't handle: documents over the sync page cap, or not holding a connection open | Poll, or `output_save_url` | Seconds to minutes | Full rate |
 | Sync | Interactive work: a person is waiting on this one result | Inline in the response | Seconds to minutes | Full rate |
 
 When you write a script or pipeline for a user, stay on `standard` jobs unless the user asks for faster turnaround; a script the user runs later is not interactive work. When they do ask, switch to `priority` jobs, which keep the batch and large-file handling. Use sync only for a single small document whose result the user needs in the same call, and pass `save_to` / `saveTo` so the full response lands on disk.
 
-Sync requests and `priority` jobs share one per-minute page limit. A single document with more pages than that limit returns HTTP 429 on every attempt; retrying never helps, so submit it as a `standard` job, which takes up to 6,000 pages. Turnaround times are estimates, and rate limits depend on the pricing plan, so check https://docs.landing.ai/dpt3/sync-async and https://docs.landing.ai/dpt3/rate-limits for current values rather than assuming them.
+Sync requests and `priority` jobs share one per-minute page limit, and no sync request can exceed it. A `priority` job larger than that limit is still accepted, up to a larger allowance capped by the rate limit, but runs slower. A single document over its cap returns HTTP 429 on every attempt; retrying never helps, so submit it as a `standard` job, which takes up to 6,000 pages. Turnaround times are estimates, and rate limits depend on the pricing plan, so check https://docs.landing.ai/dpt3/sync-async and https://docs.landing.ai/dpt3/rate-limits for current values rather than assuming them.
 
 Instead of polling, you can register a webhook endpoint (in the Playground settings; there is no management API) to receive signed `parse.succeeded`, `parse.failed`, `extract.succeeded`, and `extract.failed` events when jobs finish: https://docs.landing.ai/dpt3/webhooks.
 
