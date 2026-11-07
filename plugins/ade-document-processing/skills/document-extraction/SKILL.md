@@ -1,6 +1,6 @@
 ---
 name: document-extraction
-description: "Parses documents into structured Markdown, extracts fields with JSON schemas, classifies pages, and splits mixed document batches using LandingAI's Agentic Document Extraction (ADE) REST APIs, with official Python and TypeScript libraries. Builds document pipelines: batch and async processing for large files, classify-then-extract routing, RAG chunking and embeddings, multi-page table stitching, bounding box visualization, cropping, word-level highlighting, and grounding extracted fields to their source citations. Use when processing PDFs, images, scans, Office documents (Word, PowerPoint), invoices, forms, or bank statements, when migrating between ADE API versions, or when the user mentions ADE, parsing, extraction, classification, document splitting, table of contents generation, grounding, bounding boxes, blocks, chunks, ranges, citations, or word confidence scores."
+description: "Parses documents into structured Markdown, extracts fields with JSON schemas, classifies pages, and splits mixed document batches using LandingAI's Agentic Document Extraction (ADE) REST APIs, with official Python and TypeScript libraries. Builds document pipelines: batch and async processing for large files, classify-then-extract routing, RAG chunking and embeddings, multi-page table stitching, bounding box visualization, cropping, word-level highlighting, and grounding extracted fields to their source citations. Use when processing PDFs, images, scans, Office documents (Word, PowerPoint), spreadsheets (XLSX, CSV), invoices, forms, or bank statements, when migrating between ADE API versions, or when the user mentions ADE, parsing, extraction, classification, document splitting, table of contents generation, grounding, bounding boxes, blocks, chunks, ranges, citations, or word confidence scores."
 ---
 
 # Document Extraction (ADE)
@@ -29,13 +29,13 @@ Every linked docs page can be fetched as raw Markdown by appending `.md` to its 
 
 ## Which API Version? {#which-api-version}
 
-**Use the v2 APIs by default.** Route to v1 only when one of these applies:
+**Use the v2 APIs by default.** File format is not a reason to use v1: v2 Parse accepts PDFs, images, Office documents (DOCX, DOC, PPTX, PPT, ODT, RTF), and spreadsheets (XLSX, CSV); the formats it rejects are in Core Flow Step 1. Route to v1 only when one of these applies:
 
 - The user has existing code calling the `/v1/ade/*` endpoints (or v1 library methods `client.parse()` / `client.extract()`) and has not asked to migrate.
-- The document is a spreadsheet (XLSX, CSV) or a legacy binary Office file (DOC, PPT); only v1 Parse accepts those. v2 Parse accepts PDFs, images, and modern Office documents (DOCX, PPTX, ODT, RTF).
-- The file is password-protected (v2 rejects it with HTTP 422; v1 accepts a `password` parameter).
 - The pipeline needs custom figure prompts or v1-style page splits (`split=page`).
 - The pipeline feeds Parse output into the v1 Section or v1 Split APIs, which require the v1 Parse response shape.
+
+A password is not a reason to route to v1: both versions decrypt only PDFs (v2 through `options.password`, see Core Flow) and return HTTP 422 for a password sent with any other file type, so decrypt other files before uploading.
 
 To move an existing v1 pipeline to v2, follow https://docs.landing.ai/dpt3/migration-guide.
 
@@ -70,8 +70,8 @@ All endpoints authenticate with the same header: `Authorization: Bearer YOUR_API
 
 ### Libraries (optional)
 
-- **Python:** `pip install landingai-ade` (v1.17.0 or later covers everything in this skill). Guide: https://docs.landing.ai/dpt3/ade-python
-- **TypeScript:** `npm install landingai-ade` (v2.12.0 or later covers everything in this skill). Guide: https://docs.landing.ai/dpt3/ade-typescript
+- **Python:** `pip install landingai-ade` (v1.18.1 or later covers everything in this skill). Guide: https://docs.landing.ai/dpt3/ade-python
+- **TypeScript:** `npm install landingai-ade` (v2.13.1 or later covers everything in this skill). Guide: https://docs.landing.ai/dpt3/ade-typescript
 
 When writing scripts, use the user's language and environment. Never install packages globally; use the project's virtualenv or package.json.
 
@@ -79,7 +79,7 @@ When writing scripts, use the user's language and environment. Never install pac
 
 Parse converts a document into Markdown plus structure. Extract pulls schema-defined fields from that Markdown. **Run both as jobs on the `standard` service tier**: create the job, then call `wait()` (or poll `GET .../jobs/{job_id}`) for the finished job. Standard jobs cost half the credits of `priority`; see Processing Modes below for when to leave this default. Keep the trailing `<!-- doc_id=... -->` comment when saving Markdown; v2 Extract reads it to link the extraction back to its parse job.
 
-**Step 1: Parse.** Jobs accept PDFs, images, and Office documents (DOCX, PPTX, ODT, RTF), up to 1 GiB for PDFs and 50 MiB for images; for the current page limits, see https://docs.landing.ai/dpt3/rate-limits. Office files are converted to PDF before parsing; the conversion can change layout and page count, and page-based limits and credits apply to the converted PDF's page count (https://docs.landing.ai/dpt3/file-types). Models: `dpt-3-pro-latest` (default, highest quality) or `dpt-3-verity` (preview: lower latency and credits, for digitally created text documents only; renamed from `dpt-3-fast`, whose values still work). DPT-3 Verity does not read scans, handwriting, or non-Latin scripts, outputs plain Markdown without heading or bold formatting, and adds per-word confidence scores. Comparison and snapshot values: https://docs.landing.ai/dpt3/parse-models.
+**Step 1: Parse.** Jobs accept PDFs, images, Office documents (DOCX, DOC, PPTX, PPT, ODT, RTF), and spreadsheets (XLSX, CSV, up to 50 MB), up to 1 GiB for PDFs and 50 MiB for images; for the current page limits, see https://docs.landing.ai/dpt3/rate-limits. Parse rejects HTML, XLS, ODS, and ODP files with HTTP 422, so convert those first. It detects most formats from the file content, but CSV, TGA, DOC, and PPT files must keep their extension (`.csv`, `.tga`, `.doc`, `.ppt`) in the uploaded filename. DOCX, DOC, PPTX, PPT, ODT, and RTF files are converted to PDF before parsing; the conversion can change layout and page count, and page-based limits and credits apply to the converted PDF's page count (https://docs.landing.ai/dpt3/file-types). Models: `dpt-3-pro-latest` (default, highest quality) or `dpt-3-verity` (preview: lower latency and credits, for digitally created text documents only; renamed from `dpt-3-fast`, whose values still work). DPT-3 Verity does not read scans, handwriting, or non-Latin scripts, outputs plain Markdown without heading or bold formatting, and adds per-word confidence scores. Comparison and snapshot values: https://docs.landing.ai/dpt3/parse-models.
 
 ```bash
 mkdir -p output
@@ -145,9 +145,9 @@ Three things to get right with jobs:
 - **`wait()` has a 10-minute default timeout** (`timeout=600` seconds in Python, `timeout: 600000` milliseconds in TypeScript). When it expires, `wait()` raises `JobWaitTimeoutError` but the job keeps running server-side. Pass a longer `timeout` for large documents on `standard`, as above, or catch the error and resume with `parse_jobs.get(job_id)` / `parseJobs.get(jobId)`.
 - **Save the full response, not only the Markdown.** Job `create` methods do not accept `save_to` / `saveTo`; write `result` to disk yourself as shown, or pass `output_save_url` (see Processing Modes below). The saved JSON carries `structure` and grounding, which every cropping, table, and RAG workflow below needs.
 
-Useful `options` (multipart field with a JSON value): `{"pages": [1, 3]}` (1-indexed page selection; any page beyond the document's last page rejects the whole request with HTTP 422, or fails the job after it starts), `{"blocks": {"table": {"format": "markdown"}}}` (pipe-syntax tables instead of HTML). Full contract: [Parse API reference](https://docs.landing.ai/api-reference/parse/ade-parse), https://docs.landing.ai/dpt3/parse-input.
+Useful `options` (multipart field with a JSON value): `{"pages": [1, 3]}` (1-indexed page selection; any page beyond the document's last page rejects the whole request with HTTP 422, or fails the job after it starts), `{"blocks": {"table": {"format": "markdown"}}}` (pipe-syntax tables instead of HTML), `{"password": "..."}` (encrypted PDFs only; never hard-code it; a missing or wrong password returns HTTP 422 on Parse, while a Parse Jobs create still succeeds and the job ends `failed` with the cause in `error.code`). Full contract: [Parse API reference](https://docs.landing.ai/api-reference/parse/ade-parse), https://docs.landing.ai/dpt3/parse-input.
 
-**Step 2: Extract.** The schema is a JSON Schema object; descriptions guide the extraction, so treat them as prompts. The optional `model` field pins an extraction model snapshot (`extract-latest` is the default; pin a dated snapshot in production, because a new default snapshot can change extraction results).
+**Step 2: Extract.** The schema is a JSON Schema object; descriptions guide the extraction, so treat them as prompts. The optional `model` field pins an extraction model snapshot. Omitting it, `extract-latest`, and `extract` all run `extract-20260903`, the default since October 16, 2026; pin a dated snapshot in production, because a new default snapshot can change extraction results. Pin `extract-20260819` to keep the results from before that date (missing number, integer, and enum values differ; see Schema Design below). `metadata.model_version` reports the snapshot that ran. The `options.grounding` flag (default `true`; top-level `grounding` in the libraries) skips the grounding stage when `false`: it finishes faster, but every `ranges` is `null`, so keep the default whenever Step 3, a crop, or a highlight will follow.
 
 ```bash
 curl -X POST 'https://api.ade.landing.ai/v2/extract/jobs' \
@@ -271,15 +271,17 @@ Organizations with Zero Data Retention enabled get HTTP 501 from Ground instead 
 
 Every node carries an inline `grounding` object: `page` (1-indexed), `range` (`{start, end}`, end exclusive), and `box` (`xmin/ymin/xmax/ymax`, each normalized 0 to 1). To get a block's text, slice `markdown[range.start:range.end]`. To get pixels, multiply box values by the rendered page dimensions. Leaf blocks also carry `atomic_grounding` for fine-grained highlighting; its granularity depends on the model. DPT-3 Pro emits one entry per visual line (table cells have none). DPT-3 Verity emits one entry per word, table cells included, and each word entry carries a `confidence` score (0 to 1) for how certain the model is it transcribed the word correctly. Confidence appears only on word entries; block, table, and page groundings never carry one, so to score a block, take the minimum across its word entries. Use low scores to route transcriptions to review, or re-parse the document with DPT-3 Pro. DPT-3 Pro returns no confidence scores.
 
+**Spreadsheets (XLSX, CSV)** return `sheet` nodes (`id` is the sheet name) in place of pages, with cell data as `table` blocks, and `page_count` counts sheets. Their grounding has no `page` or `box`: each table and cell carries `address` in Excel notation (`Sales!C5`), which, unlike block ids, is stable across re-parses. Code that renders, crops, or highlights pages must skip them; only content parsed from an embedded image has a `box`, as a fraction of that image. Cell values are the stored values, without display formats. Details: https://docs.landing.ai/dpt3/parse-response#spreadsheet-responses.
+
 Markdown format details (page breaks, `<figure>` elements, attestation labels, the trailing `doc_id` comment): https://docs.landing.ai/dpt3/parse-response.
 
 **Extract** returns (https://docs.landing.ai/dpt3/extract-response):
 
-- `extraction`: values matching the schema. Fields the model cannot find come back as `null` (arrays as `[]`).
-- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges. For a field's bounding box, call Ground (Core Flow Step 3 above) with this `extraction_metadata` and the parse's `structure`; it does the range-to-block join server-side. Compute it by hand only as the documented fallback for Zero Data Retention organizations, where Ground returns HTTP 501: find the parse blocks whose `grounding.range` overlaps the field's range, then use those blocks' `grounding.box`.
+- `extraction`: values matching the schema. Fields the model cannot find come back as `null` (arrays as `[]`; number, integer, and enum fields only when nullable, see Schema Design).
+- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges, as does every value with `grounding` off. For a field's bounding box, call Ground (Core Flow Step 3 above) with this `extraction_metadata` and the parse's `structure`; it does the range-to-block join server-side. Compute it by hand only as the documented fallback for Zero Data Retention organizations, where Ground returns HTTP 501: find the parse blocks whose `grounding.range` overlaps the field's range, then use those blocks' `grounding.box`.
 - `metadata.doc_id`: the originating parse job, when the input Markdown carried the `doc_id` comment.
 
-**Ground** returns `grounding`, a tree mirroring the `extraction_metadata` you sent: objects and arrays keep their shape, and each `{value, ranges}` leaf becomes the list of blocks its ranges overlap. Each entry carries `block_id`, `type`, `parent_id` (on nested blocks, naming the enclosing one), the block's own `{page, range, box}`, and the overlapping subset of its `atomic_grounding`. Two leaves carry no blocks, for different reasons: `null` means the field had no ranges, so nothing was quoted for it (the model synthesized the value or found none), while `[]` means valid ranges matched no block, which usually means the two inputs came from different parses. Handle them separately. A value inside a table matches both the `table` and its `table_cell`, so pick whichever your highlight needs (https://docs.landing.ai/dpt3/ground).
+**Ground** returns `grounding`, a tree mirroring the `extraction_metadata` you sent: objects and arrays keep their shape, and each `{value, ranges}` leaf becomes the list of blocks its ranges overlap. Each entry carries `block_id`, `type`, `parent_id` (on nested blocks, naming the enclosing one), the block's own `{page, range, box}`, and the overlapping subset of its `atomic_grounding`. Two leaves carry no blocks, for different reasons: `null` means the field had no ranges, so nothing was quoted for it (the model synthesized the value or found none; with `grounding` off every field is `null`, so re-run Extract with the default), while `[]` means valid ranges matched no block, which usually means the two inputs came from different parses. Handle them separately. A value inside a table matches both the `table` and its `table_cell`, so pick whichever your highlight needs (https://docs.landing.ai/dpt3/ground).
 
 **Partial results (HTTP 206):** Parse sets `metadata.failed_pages` and per-page `status`; Extract sets `schema_violation_error` and `warnings`. Data is still returned and credits are consumed. **Errors:** every v2 error body has a stable `code` and a human-readable `message`; branch on `code`, never on message text. Credits are consumed only on 200/206; error responses are free, and async jobs bill only when they complete. Per-endpoint error tables: [parse-troubleshoot](https://docs.landing.ai/dpt3/parse-troubleshoot), [extract-troubleshoot](https://docs.landing.ai/dpt3/extract-troubleshoot).
 
@@ -290,16 +292,16 @@ Every v2 request runs on a service tier, `standard` or `priority`. Jobs default 
 | Mode | Best for | Result | Turnaround | Credits |
 |------|----------|--------|-----------|---------|
 | Jobs, `service_tier=standard` (default) | Work with no one waiting: automated pipelines, background agent steps, scheduled ingestion, the largest documents | Poll, or `output_save_url` | Minutes to hours | Half the `priority` rate |
-| Jobs, `service_tier=priority` | Time-sensitive work sync can't handle: larger documents, or not holding a connection open | Poll, or `output_save_url` | Seconds to minutes | Full rate |
+| Jobs, `service_tier=priority` | Time-sensitive work sync can't handle: documents over the sync page cap, or not holding a connection open | Poll, or `output_save_url` | Seconds to minutes | Full rate |
 | Sync | Interactive work: a person is waiting on this one result | Inline in the response | Seconds to minutes | Full rate |
 
 When you write a script or pipeline for a user, stay on `standard` jobs unless the user asks for faster turnaround; a script the user runs later is not interactive work. When they do ask, switch to `priority` jobs, which keep the batch and large-file handling. Use sync only for a single small document whose result the user needs in the same call, and pass `save_to` / `saveTo` so the full response lands on disk.
 
-Sync requests and `priority` jobs share one per-minute page limit. A single document with more pages than that limit returns HTTP 429 on every attempt; retrying never helps, so submit it as a `standard` job, which takes up to 6,000 pages. Turnaround times are estimates, and rate limits depend on the pricing plan, so check https://docs.landing.ai/dpt3/sync-async and https://docs.landing.ai/dpt3/rate-limits for current values rather than assuming them.
+Sync requests and `priority` jobs share one per-minute page limit, and no sync request can exceed it. A `priority` job larger than that limit is still accepted, up to a larger allowance capped by the rate limit, but runs slower. A single document over its cap returns HTTP 429 on every attempt; retrying never helps, so submit it as a `standard` job, which takes up to 6,000 pages. Turnaround times are estimates, and rate limits depend on the pricing plan, so check https://docs.landing.ai/dpt3/sync-async and https://docs.landing.ai/dpt3/rate-limits for current values rather than assuming them.
 
 Instead of polling, you can register a webhook endpoint (in the Playground settings; there is no management API) to receive signed `parse.succeeded`, `parse.failed`, `extract.succeeded`, and `extract.failed` events when jobs finish: https://docs.landing.ai/dpt3/webhooks.
 
-Both job create endpoints accept `output_save_url` (a presigned URL where the result is delivered instead of the poll response; recommended with zero data retention). The URL must stay valid until the job completes, not just at submission: an expired or soon-expiring URL is rejected at creation with HTTP 422 and no credits consumed, so sign it with a validity that outlives the job. Under Zero Data Retention (https://docs.landing.ai/ade/zdr), a v2 job result is deleted as soon as you fetch it, and a never-fetched result is deleted 24 to 48 hours after the job completes; persist the first completed poll response immediately (as Core Flow does), because polling again returns HTTP 410 (`result_expired`). With `output_save_url`, the result is delivered to your storage, then deleted immediately. Guides: [parse-async](https://docs.landing.ai/dpt3/parse-async), [extract-async](https://docs.landing.ai/dpt3/extract-async). API reference: [parse jobs](https://docs.landing.ai/api-reference/parse/ade-parse-jobs), [extract jobs](https://docs.landing.ai/api-reference/extract/ade-extract-jobs).
+Both job create endpoints accept `output_save_url` (a presigned URL where the result is delivered instead of the poll response; recommended with zero data retention). The URL must stay valid until the job completes, not just at submission: an expired or soon-expiring URL is rejected at creation with HTTP 422 and no credits consumed, so sign it with a validity that outlives the job. If delivery fails after its retries, the job still completes and returns the output in `result` with no `output_url`, so read `output_url` when present and fall back to `result`. Without Zero Data Retention, a job stays pollable and its result fetchable by `job_id` for up to 7 days after it completes; after that, polling returns HTTP 404 (the job no longer exists), while HTTP 410 (`result_expired`) means the job exists but its result is gone. To run Extract on a parse result later, save the Markdown, because Extract takes Markdown, not a Parse job ID (https://docs.landing.ai/dpt3/sync-async#job-result-availability). Under Zero Data Retention (https://docs.landing.ai/ade/zdr), a v2 job result is deleted as soon as you fetch it, and a never-fetched result is deleted 24 to 48 hours after the job completes; persist the first completed poll response immediately (as Core Flow does), because polling again returns HTTP 410 (`result_expired`). With `output_save_url`, the result is delivered to your storage, then deleted immediately. Guides: [parse-async](https://docs.landing.ai/dpt3/parse-async), [extract-async](https://docs.landing.ai/dpt3/extract-async). API reference: [parse jobs](https://docs.landing.ai/api-reference/parse/ade-parse-jobs), [extract jobs](https://docs.landing.ai/api-reference/extract/ade-extract-jobs).
 
 ## v1 APIs Without a v2 Equivalent
 
@@ -358,11 +360,11 @@ A next-generation **Split v2 API is in Preview** (select partners; accepts Markd
 
 ### v1 Parse and Extract (Superseded)
 
-Still required for spreadsheets (XLSX, CSV), legacy binary Office files (DOC, PPT), password-protected files, custom figure prompts, and Section/Split pipelines. Same auth; host `api.va.landing.ai`; parse model `dpt-2-latest`; v1 responses use a flat `chunks` list with 0-indexed pages and `left/top/right/bottom` boxes. Guides: [v1 Parse](https://docs.landing.ai/ade/parse), [v1 Extract](https://docs.landing.ai/ade/ade-extract), [v1 Parse Jobs](https://docs.landing.ai/ade/ade-parse-async), [v1 Extract Jobs](https://docs.landing.ai/ade/ade-extract-async), [password-protected files](https://docs.landing.ai/ade/ade-parse-password), [custom figure prompts](https://docs.landing.ai/ade/ade-parse-custom-prompts), [chunk types](https://docs.landing.ai/ade/ade-chunk-types), [v1 JSON response](https://docs.landing.ai/ade/ade-json-response). File format support per version: [v2 file types](https://docs.landing.ai/dpt3/file-types), [v1 file types](https://docs.landing.ai/ade/ade-file-types).
+Still required for custom figure prompts and Section/Split pipelines. Same auth; host `api.va.landing.ai`; parse model `dpt-2-latest`; v1 responses use a flat `chunks` list with 0-indexed pages and `left/top/right/bottom` boxes. Guides: [v1 Parse](https://docs.landing.ai/ade/parse), [v1 Extract](https://docs.landing.ai/ade/ade-extract), [v1 Parse Jobs](https://docs.landing.ai/ade/ade-parse-async), [v1 Extract Jobs](https://docs.landing.ai/ade/ade-extract-async), [custom figure prompts](https://docs.landing.ai/ade/ade-parse-custom-prompts), [chunk types](https://docs.landing.ai/ade/ade-chunk-types), [v1 JSON response](https://docs.landing.ai/ade/ade-json-response). File format support per version: [v2 file types](https://docs.landing.ai/dpt3/file-types), [v1 file types](https://docs.landing.ai/ade/ade-file-types).
 
 ## Workflow Rules
 
-These rules come from field experience building document pipelines. Follow them whenever you write pipeline code around ADE. Full working pipelines (batch processing, classify-then-extract, RAG ingestion with vector databases, database loading, visualization, Streamlit review UIs) live at https://github.com/landing-ai/ade-sample-projects; most samples still use the v1 APIs, so check which endpoints a sample calls before borrowing code.
+These rules come from field experience building document pipelines. Follow them whenever you write pipeline code around ADE. Full working pipelines (batch processing, classify-then-extract, RAG ingestion with vector databases, database loading, visualization, Streamlit review UIs) live at https://github.com/landing-ai/ade-sample-projects; most samples still use the v1 APIs, so check which endpoints a sample calls before borrowing code. For v2, short Python and TypeScript scripts are at https://docs.landing.ai/dpt3/code-examples-resources (each one is listed under Links). Only the directory and concurrent samples run `standard` jobs; the other four call the sync endpoints, so move those calls to jobs (see Processing Modes) before reusing them in a script.
 
 ### Pre-Flight: Inspect Before You Code (mandatory)
 
@@ -415,7 +417,8 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 
 - Start small (a few fields), then grow. Use descriptive field names and put format hints in descriptions ("in USD", "as YYYY-MM-DD"); descriptions act as extraction prompts.
 - Keep nesting to one level of objects; use an array of objects for line items and transactions.
-- v2 Extract **silently removes** unsupported JSON Schema keywords (`allOf`, `oneOf`, `const`, `pattern`, `maximum`, and others) instead of erroring; v1 Extract errors on them. Setting `strict=true` on v2 turns the silent removal into an HTTP 422. All fields are treated as required and nullable regardless of `required`.
+- v2 Extract **silently removes** unsupported JSON Schema keywords (`allOf`, `oneOf`, `const`, `pattern`, `maximum`, and others) instead of erroring; v1 Extract errors on them. Setting `strict=true` on v2 turns the silent removal into an HTTP 422. All fields are treated as required regardless of `required`.
+- A number, integer, or enum field comes back `null` for a missing value only on `extract-20260903` and only when its type allows `null` (`"type": ["number", "null"]`, an `anyOf` with `{"type": "null"}`, or `null` in the `enum`). Otherwise, and on every earlier snapshot, the model must return a value and invents one; "return null" in the description does not change that. Declare such fields nullable and handle `null`.
 - Schema authoring reference: https://docs.landing.ai/dpt3/ade-extract-schema-json. Or generate a starting schema with the Build Extract Schema API above.
 
 ### Batch Processing and Scale
@@ -458,6 +461,15 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - Classify: https://docs.landing.ai/ade/ade-classify-troubleshoot
 - Section: https://docs.landing.ai/ade/ade-section-troubleshoot
 - Split: https://docs.landing.ai/ade/ade-split-troubleshoot
+
+**Code examples (v2, Python and TypeScript):**
+- Overview: https://docs.landing.ai/dpt3/code-examples-resources
+- Parse a directory of documents: https://docs.landing.ai/dpt3/parse-directory-sample
+- Parse documents concurrently: https://docs.landing.ai/dpt3/parse-async-sample
+- Visualize parsed blocks: https://docs.landing.ai/dpt3/parse-visualize-sample
+- Save parsed blocks as images: https://docs.landing.ai/dpt3/parse-save-blocks-images-sample
+- Parse and extract: https://docs.landing.ai/dpt3/parse-extract-sample
+- Link extracted data to document locations (Ground): https://docs.landing.ai/dpt3/extract-grounding-sample
 
 **Libraries:**
 - Python guide (v2): https://docs.landing.ai/dpt3/ade-python
