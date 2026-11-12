@@ -9,7 +9,7 @@ description: "Parses documents into structured Markdown, extracts fields with JS
 
 LandingAI's Agentic Document Extraction (ADE) is a document processing service that parses, extracts, and classifies documents without templates or training. The REST APIs are the primary interface. Official libraries wrap them for Python (`landingai-ade` on PyPI) and TypeScript (`landingai-ade` on npm).
 
-ADE has two API generations. The **v2 APIs** (powered by DPT-3) are the current generation for parsing and extraction. Several capabilities exist only as **v1 APIs** and remain fully supported.
+ADE has two API generations. The **v2 APIs** (powered by DPT-3) are the current generation for parsing and extraction. Classify and Split run on the v2 host and work with either Parse version; Section and Build Extract Schema exist only as **v1 APIs** and remain fully supported.
 
 | API | Version | Endpoint | Guide |
 |-----|---------|----------|-------|
@@ -18,10 +18,10 @@ ADE has two API generations. The **v2 APIs** (powered by DPT-3) are the current 
 | Extract | v2 | `POST https://api.ade.landing.ai/v2/extract` | https://docs.landing.ai/dpt3/extract |
 | Extract Jobs | v2 | `POST/GET https://api.ade.landing.ai/v2/extract/jobs` | https://docs.landing.ai/dpt3/extract-async |
 | Ground | v2 | `POST https://api.ade.landing.ai/v2/ground` | https://docs.landing.ai/dpt3/ground |
-| Classify | v1 | `POST https://api.va.landing.ai/v1/ade/classify` | https://docs.landing.ai/ade/ade-classify |
+| Classify | v1 and v2 | `POST https://api.ade.landing.ai/v1/ade/classify` | https://docs.landing.ai/dpt3/classify |
+| Split | v1 and v2 | `POST https://api.ade.landing.ai/v1/split` | https://docs.landing.ai/dpt3/split |
 | Section | v1 | `POST https://api.va.landing.ai/v1/ade/section` | https://docs.landing.ai/ade/ade-section |
 | Build Extract Schema | v1 | `POST https://api.va.landing.ai/v1/ade/extract/build-schema` | https://docs.landing.ai/ade/ade-extract-schema-api |
-| Split | v1 | `POST https://api.va.landing.ai/v1/ade/split` | https://docs.landing.ai/ade/ade-split |
 | Parse (superseded) | v1 | `POST https://api.va.landing.ai/v1/ade/parse` | https://docs.landing.ai/ade/parse |
 | Extract (superseded) | v1 | `POST https://api.va.landing.ai/v1/ade/extract` | https://docs.landing.ai/ade/ade-extract |
 
@@ -33,7 +33,7 @@ Every linked docs page can be fetched as raw Markdown by appending `.md` to its 
 
 - The user has existing code calling the `/v1/ade/*` endpoints (or v1 library methods `client.parse()` / `client.extract()`) and has not asked to migrate.
 - The pipeline needs custom figure prompts or v1-style page splits (`split=page`).
-- The pipeline feeds Parse output into the v1 Section or v1 Split APIs, which require the v1 Parse response shape.
+- The pipeline feeds Parse output into the v1 Section API, which requires the v1 Parse response shape.
 
 A password is not a reason to route to v1: both versions decrypt only PDFs (v2 through `options.password`, see Core Flow) and return HTTP 422 for a password sent with any other file type, so decrypt other files before uploading.
 
@@ -41,12 +41,12 @@ To move an existing v1 pipeline to v2, follow https://docs.landing.ai/dpt3/migra
 
 **Do not mix versions within one pipeline**, except as this matrix allows:
 
-| Markdown produced by | v2 Extract | v1 Extract | v1 Section | v1 Split |
+| Markdown produced by | v2 Extract | v1 Extract | v1 Section | Split |
 |---|---|---|---|---|
-| Parse v2 | Yes (preferred; reads the embedded `doc_id`) | **No** | **No** | No (use v1 Parse for Split pipelines) |
+| Parse v2 | Yes (preferred; reads the embedded `doc_id`) | **No** | **No** | Yes |
 | Parse v1 | Yes (works, but no `doc_id` link) | Yes | Yes | Yes |
 
-The v1 Classify API takes the raw document, not Parse output, so it composes with either version.
+Classify takes the raw document, not Parse output, so it composes with either version.
 
 ## API Drift: Your Prior Knowledge May Be Stale
 
@@ -305,21 +305,20 @@ Instead of polling, you can register a webhook endpoint (in the Playground setti
 
 Both job create endpoints accept `output_save_url` (a presigned URL where the result is delivered instead of the poll response; recommended with zero data retention). The URL must stay valid until the job completes, not just at submission: an expired or soon-expiring URL is rejected at creation with HTTP 422 and no credits consumed, so sign it with a validity that outlives the job. If delivery fails after its retries, the job still completes and returns the output in `result` with no `output_url`, so read `output_url` when present and fall back to `result`. Without Zero Data Retention, a job stays pollable and its result fetchable by `job_id` for up to 7 days after it completes; after that, polling returns HTTP 404 (the job no longer exists), while HTTP 410 (`result_expired`) means the job exists but its result is gone. To run Extract on a parse result later, save the Markdown, because Extract takes Markdown, not a Parse job ID (https://docs.landing.ai/dpt3/sync-async#job-result-availability). Under Zero Data Retention (https://docs.landing.ai/ade/zdr), a v2 job result is deleted as soon as you fetch it, and a never-fetched result is deleted 24 to 48 hours after the job completes; persist the first completed poll response immediately (as Core Flow does), because polling again returns HTTP 410 (`result_expired`). With `output_save_url`, the result is delivered to your storage, then deleted immediately. Guides: [parse-async](https://docs.landing.ai/dpt3/parse-async), [extract-async](https://docs.landing.ai/dpt3/extract-async). API reference: [parse jobs](https://docs.landing.ai/api-reference/parse/ade-parse-jobs), [extract jobs](https://docs.landing.ai/api-reference/extract/ade-extract-jobs).
 
-## v1 APIs Without a v2 Equivalent
+## Classify, Split, Section, and Build Extract Schema
 
 ### Classify: Page-Level Classification
 
-Assigns a class to each page of a raw document (not Parse output), so it composes with v2 pipelines: classify first, then route pages to parsing. Guide: https://docs.landing.ai/ade/ade-classify. API reference: [ade-classify](https://docs.landing.ai/api-reference/tools/ade-classify).
+Assigns one of your classes to each page of the original document (not Parse output), so it composes with v2 pipelines: classify first, then route pages to parsing. Runs synchronously on the v2 host (EU: `api.ade.eu-west-1.landing.ai`). Unlike v2 Parse, it rejects spreadsheets and PPT files. Guide: https://docs.landing.ai/dpt3/classify. API reference: [ade-classify](https://docs.landing.ai/api-reference/classify/ade-classify).
 
 ```bash
-curl -X POST 'https://api.va.landing.ai/v1/ade/classify' \
+curl -X POST 'https://api.ade.landing.ai/v1/ade/classify' \
   -H 'Authorization: Bearer YOUR_API_KEY' \
   -F 'document=@batch.pdf' \
-  -F 'classes=[{"class":"invoice","description":"Commercial bill with line items and totals"},{"class":"bank_statement","description":"Monthly summary of account transactions"}]' \
-  -F 'model=classify-latest'
+  -F 'classes=[{"class":"invoice","description":"Commercial bill with line items and totals"},{"class":"bank_statement","description":"Monthly summary of account transactions"}]'
 ```
 
-The response lists one `class` per `page`. **Classify pages are 0-indexed (v1 convention); v2 Parse `options.pages` is 1-indexed, so add 1 when routing pages.** Unmatched pages come back as `unknown` with a `suggested_class`. Response fields: [ade-classify-response](https://docs.landing.ai/ade/ade-classify-response).
+The response lists one `class` per `page`. **Classify pages are 0-indexed; v2 Parse `options.pages` and `grounding.page` are 1-indexed, so add 1 when routing pages.** Unmatched pages come back as `unknown` with a `suggested_class`. Both libraries expose `client.classify` on the top-level client, not under `v2`: [Python](https://docs.landing.ai/dpt3/ade-python#classify-pages), [TypeScript](https://docs.landing.ai/dpt3/ade-typescript#classify-pages). Response fields: [classify-response](https://docs.landing.ai/dpt3/classify-response).
 
 ### Section: Table of Contents Generation
 
@@ -348,21 +347,20 @@ curl -X POST 'https://api.va.landing.ai/v1/ade/extract/build-schema' \
 
 ### Split: Multi-Document Separation
 
-Classifies and separates a file containing multiple documents (for example, a scanned packet of invoices and receipts). **Runs on v1 Parse output** (parse with `split=page` first). Guide: https://docs.landing.ai/ade/ade-split. API reference: [ade-split](https://docs.landing.ai/api-reference/tools/ade-split).
+Classifies and separates a file containing multiple documents (for example, a scanned packet of invoices and receipts). **Runs on Parse Markdown from either version**: pass the top-level `markdown` of a Parse result unmodified, because Split finds page boundaries from its `<!-- PAGE BREAK -->` markers. Synchronous. Guide: https://docs.landing.ai/dpt3/split. API reference: [ade-split](https://docs.landing.ai/api-reference/split/ade-split).
 
 ```bash
-curl -X POST 'https://api.va.landing.ai/v1/ade/split' \
+curl -X POST 'https://api.ade.landing.ai/v1/split' \
   -H 'Authorization: Bearer YOUR_API_KEY' \
-  -F 'markdown=@v1-parse-output.md' \
-  -F 'split_class=[{"name":"Bank Statement","description":"Summary of account activity over a period"},{"name":"Pay Stub","description":"Earnings and deductions for one pay period","identifier":"Pay Stub Date"}]' \
-  -F 'model=split-latest'
+  -F 'markdown=@markdown.md' \
+  -F 'split_class=[{"name":"Bank Statement","description":"Summary of account activity over a period"},{"name":"Pay Stub","description":"Earnings and deductions for one pay period","identifier":"Pay Stub Date"}]'
 ```
 
-A next-generation **Split v2 API is in Preview** (select partners; accepts Markdown from either Parse version): https://docs.landing.ai/splitv2/splitv2.
+**Split `pages` are 0-indexed; v2 Parse `grounding.page` is 1-indexed.** Both libraries expose `client.split` on the top-level client: [Python](https://docs.landing.ai/dpt3/ade-python#split-a-document), [TypeScript](https://docs.landing.ai/dpt3/ade-typescript#split-a-document). Response fields: [split-response](https://docs.landing.ai/dpt3/split-response). Existing calls to `POST /v1/ade/split` (on either host) reach this same endpoint. A separate Split v2 API is in Preview (select partners): https://docs.landing.ai/splitv2/splitv2.
 
 ### v1 Parse and Extract (Superseded)
 
-Still required for custom figure prompts and Section/Split pipelines. Same auth; host `api.va.landing.ai`; parse model `dpt-2-latest`; v1 responses use a flat `chunks` list with 0-indexed pages and `left/top/right/bottom` boxes. Guides: [v1 Parse](https://docs.landing.ai/ade/parse), [v1 Extract](https://docs.landing.ai/ade/ade-extract), [v1 Parse Jobs](https://docs.landing.ai/ade/ade-parse-async), [v1 Extract Jobs](https://docs.landing.ai/ade/ade-extract-async), [custom figure prompts](https://docs.landing.ai/ade/ade-parse-custom-prompts), [chunk types](https://docs.landing.ai/ade/ade-chunk-types), [v1 JSON response](https://docs.landing.ai/ade/ade-json-response). File format support per version: [v2 file types](https://docs.landing.ai/dpt3/file-types), [v1 file types](https://docs.landing.ai/ade/ade-file-types).
+Still required for custom figure prompts and Section pipelines. Same auth; host `api.va.landing.ai`; parse model `dpt-2-latest`; v1 responses use a flat `chunks` list with 0-indexed pages and `left/top/right/bottom` boxes. Guides: [v1 Parse](https://docs.landing.ai/ade/parse), [v1 Extract](https://docs.landing.ai/ade/ade-extract), [v1 Parse Jobs](https://docs.landing.ai/ade/ade-parse-async), [v1 Extract Jobs](https://docs.landing.ai/ade/ade-extract-async), [custom figure prompts](https://docs.landing.ai/ade/ade-parse-custom-prompts), [chunk types](https://docs.landing.ai/ade/ade-chunk-types), [v1 JSON response](https://docs.landing.ai/ade/ade-json-response). File format support per version: [v2 file types](https://docs.landing.ai/dpt3/file-types), [v1 file types](https://docs.landing.ai/ade/ade-file-types).
 
 ## Workflow Rules
 
@@ -399,7 +397,7 @@ After stitching, validate with domain checks: column totals match a stated total
 ### Classify-Then-Extract (Mixed Document Batches)
 
 - **Each file is one document of unknown type:** run a one-field Extract (an enum `type` field) on the parsed Markdown, then extract again with the type-specific schema.
-- **One file contains several documents:** use the v1 Split pipeline (v1 Parse with `split=page`, then Split, then Extract per sub-document).
+- **One file contains several documents:** Parse, then Split on the Markdown, then Extract per sub-document.
 - **Route pages before parsing:** use Classify on the raw file, then parse only the relevant pages with v2 `options.pages` (remember the 0-indexed to 1-indexed conversion).
 
 ### RAG and Embedding Granularity
@@ -449,10 +447,10 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - Extract v2: https://docs.landing.ai/api-reference/extract/ade-extract
 - Extract Jobs v2: https://docs.landing.ai/api-reference/extract/ade-extract-jobs
 - Ground v2: https://docs.landing.ai/api-reference/ground/ade-ground
-- Classify: https://docs.landing.ai/api-reference/tools/ade-classify
+- Classify: https://docs.landing.ai/api-reference/classify/ade-classify
 - Section: https://docs.landing.ai/api-reference/tools/ade-section
 - Build Extract Schema: https://docs.landing.ai/api-reference/tools/ade-build-extract-schema
-- Split: https://docs.landing.ai/api-reference/tools/ade-split
+- Split: https://docs.landing.ai/api-reference/split/ade-split
 - Parse v1: https://docs.landing.ai/api-reference/tools/ade-parse
 - Extract v1: https://docs.landing.ai/api-reference/tools/ade-extract
 
@@ -460,9 +458,9 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - Parse v2: https://docs.landing.ai/dpt3/parse-troubleshoot
 - Extract v2: https://docs.landing.ai/dpt3/extract-troubleshoot
 - Ground v2: https://docs.landing.ai/dpt3/ground-troubleshoot
-- Classify: https://docs.landing.ai/ade/ade-classify-troubleshoot
+- Classify: https://docs.landing.ai/dpt3/classify-troubleshoot
 - Section: https://docs.landing.ai/ade/ade-section-troubleshoot
-- Split: https://docs.landing.ai/ade/ade-split-troubleshoot
+- Split: https://docs.landing.ai/dpt3/split-troubleshoot
 
 **Code examples (v2, Python and TypeScript):**
 - Overview: https://docs.landing.ai/dpt3/code-examples-resources
