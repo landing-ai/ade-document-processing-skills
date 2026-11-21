@@ -259,7 +259,7 @@ console.log(groundResponse.grounding);
 
 **Pair each extraction with its own parse.** Ranges shift between parses, even of the same file, so an extraction grounds only against the `structure` it was extracted from. A mismatched pair is not an error: Ground returns HTTP 200 with plausible boxes that land on the wrong content, and nothing in the response marks it. Check the pairing in code before rendering anything, by comparing the Extract response's `metadata.doc_id` with the Parse response's `metadata.job_id`. Re-parsing a document means re-running its extraction too.
 
-Organizations with Zero Data Retention enabled get HTTP 501 from Ground instead of a result; see "Reading v2 Responses" below for the manual fallback. Full contract: [Ground API reference](https://docs.landing.ai/api-reference/ground/ade-ground), https://docs.landing.ai/dpt3/ground.
+Full contract: [Ground API reference](https://docs.landing.ai/api-reference/ground/ade-ground), https://docs.landing.ai/dpt3/ground.
 
 ## Reading v2 Responses
 
@@ -280,7 +280,7 @@ Markdown format details (page breaks, `<figure>` elements, attestation labels, t
 **Extract** returns (https://docs.landing.ai/dpt3/extract-response):
 
 - `extraction`: values matching the schema. Fields the model cannot find come back as `null` (arrays as `[]`; number, integer, enum, and boolean fields only when nullable, see Schema Design).
-- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges, as does every value with `grounding` off. For a field's bounding box, call Ground (Core Flow Step 3 above) with this `extraction_metadata` and the parse's `structure`; it does the range-to-block join server-side. Compute it by hand only as the documented fallback for Zero Data Retention organizations, where Ground returns HTTP 501: find the parse blocks whose `grounding.range` overlaps the field's range, then use those blocks' `grounding.box`.
+- `extraction_metadata`: mirrors `extraction` with each leaf replaced by `{"value": ..., "ranges": [...]}`. Each range indexes into the input Markdown; a synthesized value has `null` ranges, as does every value with `grounding` off. For a field's bounding box, call Ground (Core Flow Step 3 above) with this `extraction_metadata` and the parse's `structure`; it does the range-to-block join server-side.
 - `metadata.doc_id`: the originating parse job, when the input Markdown carried the `doc_id` comment.
 
 **Ground** returns `grounding`, a tree mirroring the `extraction_metadata` you sent: objects and arrays keep their shape, and each `{value, ranges}` leaf becomes the list of blocks its ranges overlap. Each entry carries `block_id`, `type`, `parent_id` (on nested blocks, naming the enclosing one), the block's own `{page, range, box}`, and the overlapping subset of its `atomic_grounding`. Two leaves carry no blocks, for different reasons: `null` means the field had no ranges, so nothing was quoted for it (the model synthesized the value or found none; with `grounding` off every field is `null`, so re-run Extract with the default), while `[]` means valid ranges matched no block, which usually means the two inputs came from different parses. Handle them separately. A value inside a table matches both the `table` and its `table_cell`, so pick whichever your highlight needs (https://docs.landing.ai/dpt3/ground).
@@ -419,11 +419,12 @@ Embed `text`, `table`, and `card` blocks; exclude `marginalia` (running headers,
 - Keep nesting to one level of objects; use an array of objects for line items and transactions.
 - v2 Extract **silently removes** unsupported JSON Schema keywords (`allOf`, `oneOf`, `const`, `pattern`, `maximum`, and others) instead of erroring; v1 Extract errors on them. Setting `strict=true` on v2 turns the silent removal into an HTTP 422. All fields are treated as required regardless of `required`.
 - A number, integer, enum, or boolean field comes back `null` for a missing value only on `extract-20260903` and only when the schema allows `null`. Otherwise, and on every earlier snapshot, the model must return a value: it invents a number or enum option, and a boolean comes back `false`; "return null" in the description does not change that. Declare such fields `"nullable": true` and handle `null`. The other spellings (a `type` list with `"null"`, an `anyOf` with `{"type": "null"}`, `null` in the `enum`) work only when every keyword that limits the value allows `null`; otherwise the field still returns `null` but the response carries `schema_violation_error` (HTTP 206), as with `null` in the `enum` of a `"type": "string"` field.
+- An `enum` of numbers (such as `[15, 30, 60]`) comes back as a number (`30`) on `extract-20260819` and `extract-20260903`, and as the string `"30"` on older snapshots, so compare answers by the type the snapshot returns.
 - Schema authoring reference: https://docs.landing.ai/dpt3/ade-extract-schema-json. Or generate a starting schema with the Build Extract Schema API above.
 
 ### Batch Processing and Scale
 
-- Batches run as `standard` jobs. Create every job first, record the `job_id`s, then wait on each; a create-then-wait loop per document serializes the batch on its slowest job.
+- Batches run as `standard` jobs. Create every job first, record the `job_id`s, then wait on each; a create-then-wait loop per document serializes the batch on its slowest job. If a `job_id` is lost, find it with `GET /v2/parse/jobs` or `GET /v2/extract/jobs` (newest first; rows carry no result, so fetch each job by `job_id`) instead of resubmitting and paying twice. In a REST query string the page size is `pageSize`: `page_size` is silently ignored there and you get the default 10, although the libraries and the response call it `page_size`.
 - If you do fan out over sync endpoints, keep concurrency modest (single digits) and retry 429/5xx with exponential backoff, except a 429 on one oversized document, which no retry clears (see Processing Modes). Limits: https://docs.landing.ai/dpt3/rate-limits.
 - A sync request that times out (HTTP 504) means the document is too large for sync; resubmit it as a job rather than retrying.
 - Save every parse response to disk as you go; a re-run should never re-parse documents that already succeeded.
